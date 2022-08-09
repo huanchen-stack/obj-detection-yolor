@@ -72,6 +72,9 @@ def detect(save_img=False):
     # Run inference
     t0 = time.time()
     img = torch.zeros((1, 3, imgsz, imgsz), device=device)  # init img
+    print(f"-------------------------------------------------")
+    print(f"-------------------- WARM UP --------------------")
+    print(f"-------------------------------------------------")
     _ = model(img.half() if half else img) if device.type != 'cpu' else None  # run once
     for path, img, im0s, vid_cap in dataset:
         img = torch.from_numpy(img).to(device)
@@ -81,12 +84,21 @@ def detect(save_img=False):
             img = img.unsqueeze(0)
 
         # Inference
+        print(f"\n-------------------------------------------------")
+        print(f"------------------- INFERENCE -------------------")
+        print(f"-------------------------------------------------")
         t1 = time_synchronized()
         pred = model(img, augment=opt.augment)[0]
+
+        t1_5 = time_synchronized()
 
         # Apply NMS
         pred = non_max_suppression(pred, opt.conf_thres, opt.iou_thres, classes=opt.classes, agnostic=opt.agnostic_nms)
         t2 = time_synchronized()
+
+        print(f"\t::inference time: {t1_5 - t1}")
+        print(f"\t\t::timestamps: from {t1} ~ {t1_5}")
+        print(f"\t::nms time: {t2 - t1_5}")
 
         # Apply Classifier
         if classify:

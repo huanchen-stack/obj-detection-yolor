@@ -584,6 +584,9 @@ class Darknet(nn.Module):
                            ), 0)
 
         for i, module in enumerate(self.module_list):
+
+            # ts_start = torch_utils.time_synchronized()
+
             name = module.__class__.__name__
             #print(name)
             if name in ['WeightedFeatureFusion', 'FeatureConcat', 'FeatureConcat2', 'FeatureConcat3', 'FeatureConcat_l', 'ScaleChannel', 'ShiftChannel', 'ShiftChannel2D', 'ControlChannel', 'ControlChannel2D', 'AlternateChannel', 'AlternateChannel2D', 'SelectChannel', 'SelectChannel2D', 'ScaleSpatial']:  # sum, concat
@@ -607,6 +610,8 @@ class Darknet(nn.Module):
             if verbose:
                 print('%g/%g %s -' % (i, len(self.module_list), name), list(x.shape), str)
                 str = ''
+
+            # ts_finish = torch_utils.time_synchronized()
 
         if self.training:  # train
             return yolo_out
