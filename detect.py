@@ -76,6 +76,8 @@ def detect(save_img=False):
     print(f"-------------------- WARM UP --------------------")
     print(f"-------------------------------------------------")
     _ = model(img.half() if half else img) if device.type != 'cpu' else None  # run once
+    # _ = model(img.half() if half else img) if device.type != 'cpu' else None  # run once
+    # _ = model(img.half() if half else img) if device.type != 'cpu' else None  # run once
     for path, img, im0s, vid_cap in dataset:
         img = torch.from_numpy(img).to(device)
         img = img.half() if half else img.float()  # uint8 to fp16/32
@@ -88,8 +90,20 @@ def detect(save_img=False):
         print(f"------------------- INFERENCE -------------------")
         print(f"-------------------------------------------------")
         t1 = time_synchronized()
-        pred = model(img, augment=opt.augment)[0]
 
+        # starter = torch.cuda.Event(enable_timing=True)
+        # ender = torch.cuda.Event(enable_timing=True)
+
+        # starter.record()
+        # pred = model(img, augment=opt.augment)[0]
+        # ender.record()
+        # torch.cuda.synchronize()
+        # delta = starter.elapsed_time(starter)
+        # print(f"WHL: {delta}")
+
+        pred = model(img, augment=opt.augment)[0]
+        pred = model(img, augment=opt.augment)[0]
+        pred = model(img, augment=opt.augment)[0]
         t1_5 = time_synchronized()
 
         # Apply NMS
