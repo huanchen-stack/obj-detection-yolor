@@ -590,7 +590,7 @@ class Darknet(nn.Module):
         PATH = os.path.join(PATH, "inferlog.csv")
 	 	# f_inferlog = open(PATH, "w")
 
-        AGG = False
+        AGG = True
         
         starter = torch.cuda.Event(enable_timing=True)
         ender = torch.cuda.Event(enable_timing=True)
@@ -669,7 +669,14 @@ class Darknet(nn.Module):
                 torch.cuda.synchronize()
                 delta = starter.elapsed_time(ender)/1000
 
-                print(f"{i},{delta},{type(x)}")
+                data_payload = None
+                if type(x) == torch.Tensor:
+                    data_payload = round(x.element_size() * x.nelement() / 1000000, 4)
+                elif type(x) == torch.nn.parameter.Parameter:
+                    data_payload = round(x.data.element_size() * x.data.nelement() / 1000000, 4)
+                
+                # layer_name,time,cpu_mem,cuda_mem,size,macs
+                print(f"{i},{round(delta,6)},0,0,{data_payload},0")
                 TIME_AGG += delta
             
             else:
