@@ -4,6 +4,7 @@ from utils.parse_config import *
 from utils import torch_utils
 
 import os
+import time
 
 ONNX_EXPORT = False
 
@@ -539,6 +540,8 @@ class Darknet(nn.Module):
         self.seen = np.array([0], dtype=np.int64)  # (int64) number of images seen during training
         self.info(verbose) if not ONNX_EXPORT else None  # print model description
 
+        self.AGG = None
+
     def forward(self, x, augment=False, verbose=False):
 
         if not augment:
@@ -590,15 +593,19 @@ class Darknet(nn.Module):
         PATH = os.path.join(PATH, "inferlog.csv")
 	 	# f_inferlog = open(PATH, "w")
 
-        AGG = True
+        if self.AGG is None:
+            self.AGG = True if input("Per Layer Aggregation [y/N]") == 'y' else False
         
         starter = torch.cuda.Event(enable_timing=True)
         ender = torch.cuda.Event(enable_timing=True)
+
+        AGG = self.AGG
 
         if AGG:
             TIME_AGG = 0
         else:
             starter.record()
+            start_walltime = time.time()
 
         for i, module in enumerate(self.module_list):
             
@@ -717,7 +724,9 @@ class Darknet(nn.Module):
             ender.record()
             torch.cuda.synchronize()
             delta = starter.elapsed_time(ender)/1000
+            delta_walltime = time.time() - start_walltime
             print(f"WHL: {delta}")
+            print(f"\tWALL TIME({delta_walltime}):\n\t\t{start_walltime},{start_walltime + delta_walltime}")
 
         if self.training:  # train
             return yolo_out
