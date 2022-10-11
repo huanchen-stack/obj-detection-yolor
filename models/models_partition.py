@@ -3,9 +3,10 @@ from utils.layers import *
 from utils.parse_config import *
 from utils import torch_utils
 
+from utils.partition_manager import PartitionManager, partition_manager
+
 import os
 import time
-from tqdm import tqdm
 
 ONNX_EXPORT = False
 
@@ -541,7 +542,14 @@ class Darknet(nn.Module):
         self.seen = np.array([0], dtype=np.int64)  # (int64) number of images seen during training
         self.info(verbose) if not ONNX_EXPORT else None  # print model description
 
-        self.AGG = None
+        # self.AGG = None
+        #########################################################
+        ############## Needed for PartitionManager ##############
+        #########################################################
+        self.exec_labels = {}
+        self.args = {}
+        self.filtering = False
+        #########################################################
 
     def forward(self, x, augment=False, verbose=False):
 
@@ -594,149 +602,47 @@ class Darknet(nn.Module):
         PATH = os.path.join(PATH, "inferlog.csv")
 	 	# f_inferlog = open(PATH, "w")
 
-        if self.AGG is None:
-            self.AGG = True if input("Per Layer Aggregation [y/N]") == 'y' else False
-        
-        starter = torch.cuda.Event(enable_timing=True)
-        ender = torch.cuda.Event(enable_timing=True)
+        # starter = torch.cuda.Event(enable_timing=True)
+        # ender = torch.cuda.Event(enable_timing=True)
 
-        AGG = self.AGG
-
-        if AGG:
-            TIME_AGG = 0
-        else:
-            starter.record()
-            start_walltime = time.time()
-
-        f = open('tmp.csv', 'w')
-        f.write(f"layer_name,time,cpu_mem,cuda_mem,size,macs\n")
-        f.write(f"input,0,0,0,0,0\n")
-        f.write(f"output_,0,0,0,0,0\n")
-        f.write(f"output,0,0,0,0,0\n")
-
-        for i, module in tqdm(enumerate(self.module_list)):
+        for i, module in enumerate(self.module_list):
             
-            if AGG:
-                #########################################
-                name = module.__class__.__name__
-                #print(name)
-                if name in ['WeightedFeatureFusion', 'FeatureConcat', 'FeatureConcat2', 'FeatureConcat3', 'FeatureConcat_l', 'ScaleChannel', 'ShiftChannel', 'ShiftChannel2D', 'ControlChannel', 'ControlChannel2D', 'AlternateChannel', 'AlternateChannel2D', 'SelectChannel', 'SelectChannel2D', 'ScaleSpatial']:  # sum, concat
-                    if verbose:
-                        l = [i - 1] + module.layers  # layers
-                        sh = [list(x.shape)] + [list(out[i].shape) for i in module.layers]  # shapes
-                        str = ' >> ' + ' + '.join(['layer %g %s' % x for x in zip(l, sh)])
-                    module(x, out)  # WeightedFeatureFusion(), FeatureConcat()
-                elif name in ['ImplicitA', 'ImplicitM', 'ImplicitC', 'Implicit2DA', 'Implicit2DM', 'Implicit2DC']:
-                    module()
-                elif name == 'YOLOLayer':
-                    module(x, out)
-                elif name == 'JDELayer':
-                    module(x, out)
-                else:  # run module directly, i.e. mtype = 'convolutional', 'upsample', 'maxpool', 'batchnorm2d' etc.
-                    module(x)
-                #########################################
-                
-                #########################################
-                name = module.__class__.__name__
-                #print(name)
-                if name in ['WeightedFeatureFusion', 'FeatureConcat', 'FeatureConcat2', 'FeatureConcat3', 'FeatureConcat_l', 'ScaleChannel', 'ShiftChannel', 'ShiftChannel2D', 'ControlChannel', 'ControlChannel2D', 'AlternateChannel', 'AlternateChannel2D', 'SelectChannel', 'SelectChannel2D', 'ScaleSpatial']:  # sum, concat
-                    if verbose:
-                        l = [i - 1] + module.layers  # layers
-                        sh = [list(x.shape)] + [list(out[i].shape) for i in module.layers]  # shapes
-                        str = ' >> ' + ' + '.join(['layer %g %s' % x for x in zip(l, sh)])
-                    module(x, out)  # WeightedFeatureFusion(), FeatureConcat()
-                elif name in ['ImplicitA', 'ImplicitM', 'ImplicitC', 'Implicit2DA', 'Implicit2DM', 'Implicit2DC']:
-                    module()
-                elif name == 'YOLOLayer':
-                    module(x, out)
-                elif name == 'JDELayer':
-                    module(x, out)
-                else:  # run module directly, i.e. mtype = 'convolutional', 'upsample', 'maxpool', 'batchnorm2d' etc.
-                    module(x)
-                #########################################
-                
-                starter.record()
-
-                #########################################
-                name = module.__class__.__name__
-                #print(name)
-                if name in ['WeightedFeatureFusion', 'FeatureConcat', 'FeatureConcat2', 'FeatureConcat3', 'FeatureConcat_l', 'ScaleChannel', 'ShiftChannel', 'ShiftChannel2D', 'ControlChannel', 'ControlChannel2D', 'AlternateChannel', 'AlternateChannel2D', 'SelectChannel', 'SelectChannel2D', 'ScaleSpatial']:  # sum, concat
-                    if verbose:
-                        l = [i - 1] + module.layers  # layers
-                        sh = [list(x.shape)] + [list(out[i].shape) for i in module.layers]  # shapes
-                        str = ' >> ' + ' + '.join(['layer %g %s' % x for x in zip(l, sh)])
-                    x = module(x, out)  # WeightedFeatureFusion(), FeatureConcat()
-                elif name in ['ImplicitA', 'ImplicitM', 'ImplicitC', 'Implicit2DA', 'Implicit2DM', 'Implicit2DC']:
-                    x = module()
-                elif name == 'YOLOLayer':
-                    yolo_out.append(module(x, out))
-                elif name == 'JDELayer':
-                    yolo_out.append(module(x, out))
-                else:  # run module directly, i.e. mtype = 'convolutional', 'upsample', 'maxpool', 'batchnorm2d' etc.
-                    #print(module)
-                    #print(x.shape)
-                    x = module(x)
-                out.append(x if self.routs[i] else [])
-                #########################################
-
-                ender.record()
-                torch.cuda.synchronize()
-                delta = starter.elapsed_time(ender)/1000
-
-                data_payload = None
-                if type(x) == torch.Tensor:
-                    data_payload = round(x.element_size() * x.nelement() / 1000000, 4)
-                elif type(x) == torch.nn.parameter.Parameter:
-                    data_payload = round(x.data.element_size() * x.data.nelement() / 1000000, 4)
-                
-                # layer_name,time,cpu_mem,cuda_mem,size,macs
-                f.write(f"{i},{round(delta,6)},0,0,{data_payload},0\n")
-                # print(f"{i},{round(delta,6)},0,0,{data_payload},0")
-                TIME_AGG += delta
             
-            else:
-                #########################################
-                name = module.__class__.__name__
-                #print(name)
-                if name in ['WeightedFeatureFusion', 'FeatureConcat', 'FeatureConcat2', 'FeatureConcat3', 'FeatureConcat_l', 'ScaleChannel', 'ShiftChannel', 'ShiftChannel2D', 'ControlChannel', 'ControlChannel2D', 'AlternateChannel', 'AlternateChannel2D', 'SelectChannel', 'SelectChannel2D', 'ScaleSpatial']:  # sum, concat
-                    if verbose:
-                        l = [i - 1] + module.layers  # layers
-                        sh = [list(x.shape)] + [list(out[i].shape) for i in module.layers]  # shapes
-                        str = ' >> ' + ' + '.join(['layer %g %s' % x for x in zip(l, sh)])
-                    x = module(x, out)  # WeightedFeatureFusion(), FeatureConcat()
-                elif name in ['ImplicitA', 'ImplicitM', 'ImplicitC', 'Implicit2DA', 'Implicit2DM', 'Implicit2DC']:
-                    x = module()
-                elif name == 'YOLOLayer':
-                    yolo_out.append(module(x, out))
-                elif name == 'JDELayer':
-                    yolo_out.append(module(x, out))
-                else:  # run module directly, i.e. mtype = 'convolutional', 'upsample', 'maxpool', 'batchnorm2d' etc.
-                    #print(module)
-                    #print(x.shape)
-                    x = module(x)
-                out.append(x if self.routs[i] else [])
-                #########################################
+            #########################################
+            name = module.__class__.__name__
+            #print(name)
+            if name in ['WeightedFeatureFusion', 'FeatureConcat', 'FeatureConcat2', 'FeatureConcat3', 'FeatureConcat_l', 'ScaleChannel', 'ShiftChannel', 'ShiftChannel2D', 'ControlChannel', 'ControlChannel2D', 'AlternateChannel', 'AlternateChannel2D', 'SelectChannel', 'SelectChannel2D', 'ScaleSpatial']:  # sum, concat
+                if verbose:
+                    l = [i - 1] + module.layers  # layers
+                    sh = [list(x.shape)] + [list(out[i].shape) for i in module.layers]  # shapes
+                    str = ' >> ' + ' + '.join(['layer %g %s' % x for x in zip(l, sh)])
+                x = module(x, out)  # WeightedFeatureFusion(), FeatureConcat()
+            elif name in ['ImplicitA', 'ImplicitM', 'ImplicitC', 'Implicit2DA', 'Implicit2DM', 'Implicit2DC']:
+                x = module()
+            elif name == 'YOLOLayer':
+                yolo_out.append(module(x, out))
+            elif name == 'JDELayer':
+                yolo_out.append(module(x, out))
+            else:  # run module directly, i.e. mtype = 'convolutional', 'upsample', 'maxpool', 'batchnorm2d' etc.
+                #print(module)
+                #print(x.shape)
+                x = module(x)
+            out.append(x if self.routs[i] else [])
+            #########################################
 
-            # out.append(x if self.routs[i] else [])
+            data_payload = None
+            if type(x) == torch.Tensor:
+                data_payload = round(x.element_size() * x.nelement() / 1000000, 4)
+            elif type(x) == torch.nn.parameter.Parameter:
+                data_payload = round(x.data.element_size() * x.data.nelement() / 1000000, 4)
+            
+            # # layer_name,time,cpu_mem,cuda_mem,size,macs
+            # print(f"{i},{round(delta,6)},0,0,{data_payload},0")
+            # TIME_AGG += delta
+
             if verbose:
                 print('%g/%g %s -' % (i, len(self.module_list), name), list(x.shape), str)
                 str = ''
-
-            # f_inferlog.write(f"{i},{ts_start},{ts_finish}\n")
-
-        # f_inferlog.close()
-
-        f.close()
-
-        if AGG:   
-            print(f"TIME_AGG: {TIME_AGG}")
-        else:
-            ender.record()
-            torch.cuda.synchronize()
-            delta = starter.elapsed_time(ender)/1000
-            delta_walltime = time.time() - start_walltime
-            print(f"WHL: {delta}")
-            print(f"\tWALL TIME({delta_walltime}):\n\t\t{start_walltime},{start_walltime + delta_walltime}")
 
         if self.training:  # train
             return yolo_out

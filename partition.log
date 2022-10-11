@@ -1,0 +1,3 @@
+Using torch 1.12.0a0+2c916ef.nv22.3 CUDA:0 (Xavier, 31011MB)
+
+Model Summary: 665 layers, 37265016 parameters, 37265016 gradients
