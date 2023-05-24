@@ -1,3 +1,16 @@
+## TO GET per-layer inference of YOLOR, simply follow this section:
+## Inference
+
+[`yolor_p6.pt`](https://drive.google.com/file/d/1Tdn3yqpZ79X7R1Ql0zNlNScB1Dv9Fp76/view?usp=sharing)
+
+```
+python detect.py --source inference/images/horses.jpg --cfg cfg/yolor_p6.cfg --weights yolor_p6.pt --conf 0.25 --img-size 1280 --device 0
+```
+
+You will get the results:
+
+![horses](https://github.com/WongKinYiu/yolor/blob/main/inference/output/horses.jpg)
+
 # YOLOR
 implementation of paper - [You Only Learn One Representation: Unified Network for Multiple Tasks](https://arxiv.org/abs/2105.04206)
 
